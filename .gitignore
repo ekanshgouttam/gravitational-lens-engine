@@ -1,0 +1,6 @@
+data/raw/
+data/simulated/
+data/processed/
+models/
+*.pyc
+__pycache__/
