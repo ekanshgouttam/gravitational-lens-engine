@@ -179,3 +179,76 @@ def inject_lens_into_background(large_background, pixel_scale, crop_size,
         'label': result_raw['label'],
         'metadata': result_raw['metadata']
     }
+
+def generate_injected_dataset(n_lens, n_nonlens, large_backgrounds, psf_kernels,
+                                 crop_size, pixel_scale, output_dir, seed_start=0):
+    """
+    Generate a full dataset of real-injected lens/non-lens images by
+    sampling across multiple real background fields, saving images to
+    HDF5 and metadata to Parquet - same output structure as Week 2's
+    generate_dataset(), for consistency between the two datasets.
+
+    :param n_lens: number of lens images to generate.
+    :param n_nonlens: number of non-lens images to generate.
+    :param large_backgrounds: list of large real background arrays to
+                                sample injection sites from.
+    :param psf_kernels: list of stacked PSF kernels, one per background
+                          field, in matching order.
+    :param crop_size: output image size in pixels.
+    :param pixel_scale: real background pixel scale, arcsec/pixel.
+    :param output_dir: directory to save dataset files into.
+    :param seed_start: starting seed for reproducibility.
+    :return: paths to the saved HDF5 and Parquet files.
+    """
+    import os
+    import h5py
+    import pandas as pd
+    from tqdm import tqdm
+
+    n_total = n_lens + n_nonlens
+    images = np.zeros((n_total, crop_size, crop_size), dtype=np.float32)
+    residuals = np.zeros((n_total, crop_size, crop_size), dtype=np.float32)
+    metadata_rows = []
+
+    idx = 0
+    n_skipped = 0
+    labels_to_generate = [True] * n_lens + [False] * n_nonlens
+
+    for attempt, is_lens in enumerate(tqdm(labels_to_generate, desc="Generating injected images")):
+        field_idx = np.random.randint(0, len(large_backgrounds))
+        result = inject_lens_into_background(
+            large_backgrounds[field_idx], pixel_scale=pixel_scale, crop_size=crop_size,
+            psf_kernel=psf_kernels[field_idx], is_lens=is_lens, seed=seed_start + attempt
+        )
+
+        if result is None:
+            n_skipped += 1
+            continue
+
+        images[idx] = result['image_normalized']
+        residuals[idx] = result['residual_normalized']
+        row = {'index': idx, 'label': result['label'], 'seed': seed_start + attempt, 'field_idx': field_idx}
+        row.update(result['metadata'])
+        metadata_rows.append(row)
+        idx += 1
+
+    if n_skipped > 0:
+        print(f"Warning: {n_skipped} injection attempts failed to find a clean site and were skipped.")
+        images = images[:idx]
+        residuals = residuals[:idx]
+
+    os.makedirs(output_dir, exist_ok=True)
+    h5_path = os.path.join(output_dir, 'injected_dataset.h5')
+    with h5py.File(h5_path, 'w') as f:
+        f.create_dataset('images', data=images, compression='gzip', compression_opts=4)
+        f.create_dataset('residuals', data=residuals, compression='gzip', compression_opts=4)
+
+    metadata_df = pd.DataFrame(metadata_rows)
+    parquet_path = os.path.join(output_dir, 'injected_dataset_metadata.parquet')
+    metadata_df.to_parquet(parquet_path, index=False)
+
+    print(f"Saved {idx} images to {h5_path}")
+    print(f"Saved metadata ({len(metadata_df)} rows) to {parquet_path}")
+    print(f"Label distribution:\n{metadata_df['label'].value_counts()}")
+
+    return h5_path, parquet_path
