@@ -20,11 +20,13 @@ Strong gravitational lensing is scientifically valuable (dark matter mapping, Hu
 | ResNet-18 (from scratch) | 96% | 0.97 | 0.95 | Baseline |
 | ConvNeXt-Nano (pretrained, single-task) | 98% | 1.00 | 0.96 | |
 | ConvNeXt-Nano (multi-head, pretrained) | 99% | 0.99 | 0.99 | Best overall |
-| ConvNeXt-Nano (curriculum-trained) | 99% | 1.00 | 0.98 | |
+| ConvNeXt-Nano (curriculum-trained) | 99% | 1.00 | 0.98 | AUC 0.9996 (highest); see note below | |
 
 ![Model comparison](docs/model_comparison.png)
 
 **Multi-head auxiliary interpretability heads improved core classification performance**, not just added explainability — likely because predicting real physical properties pushed the shared encoder toward genuinely relevant features rather than shortcut cues.
+
+*Note: the curriculum model's originally-recorded confusion matrix was lost to an accidental checkpoint overwrite during development (caught via a later cross-check against git history) — a real lesson in checkpoint versioning. Currently-reproducible metrics (AUC-ROC) are reported instead.*
 
 ### Calibration finding
 
